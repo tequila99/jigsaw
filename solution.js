@@ -1,90 +1,71 @@
 function solvePuzzle(pieces) {
-  const mapOutside = new Map();
-  const mapInside = new Map();
+  const PUZZLE_SIZE = Math.ceil(Math.sqrt(pieces.length))
 
-  const top = ({ edges: { top } }) => top;
-  const right = ({ edges: { right } }) => right;
-  const bottom = ({ edges: { bottom } }) => bottom;
-  const left = ({ edges: { left } }) => left;
-
-  const edgeType = ({ type = null }) => type;
-  const edgeId = ({ edgeTypeId = null }) => edgeTypeId;
-
-  const rotate = piece => ({
-    ...piece,
-    edges: {
-      top: left(piece),
-      right: top(piece),
-      bottom: right(piece),
-      left: bottom(piece),
-    }
-  });
+  const top = piece  => piece  ? piece.edges.top : null;
+  const right = piece => piece  ? piece.edges.right : null;
+  const bottom = piece => piece  ? piece.edges.bottom : null;
+  const left = piece => piece  ? piece.edges.left : null;
+  const edgeType = edge => edge ? edge.type : null;
+  const edgeId = edge => edge ? edge.edgeTypeId : null;
 
   const compare = (fEdge, sEdge = null) =>
-    sEdge
+    fEdge && sEdge
       ? edgeId(fEdge) === edgeId(sEdge) && edgeType(fEdge) !== edgeType(sEdge)
       : fEdge === sEdge;
 
-  const nextRight = piece =>
-    edgeType(right(piece)) === 'inside'
-      ? mapOutside.get(edgeId(right(piece)))
-      : mapInside.get(edgeId(right(piece)));
-
-  const nextBottom = piece =>
-    edgeType(bottom(piece)) === 'inside'
-      ? mapOutside.get(edgeId(bottom(piece)))
-      : mapInside.get(edgeId(bottom(piece)));
-
-  const column = (piece) => {
-    const result = [ piece ];
-    let currentPiece = piece;
-    while (!compare(bottom(currentPiece), null)) {
-      const prevPiece = currentPiece;
-      currentPiece = nextBottom(prevPiece);
-      while (!compare(bottom(prevPiece), top(currentPiece))) {
-        currentPiece = rotate(currentPiece);
-      }
-      result.push(currentPiece);
-    }    
-    return result;
+  const suitableEdge = edge => {
+    if (!edge) return edge
+    const newEdge = { ...edge }
+    newEdge.type = edge.type === 'inside' ? 'outside' : 'inside'
+    return newEdge
   }
 
-  const row = piece => {
-    const result = [ piece ];
-    let currentPiece = piece;
-    while (!compare(right(currentPiece), null)) {
-      const prevPiece = currentPiece;
-      currentPiece = nextRight(prevPiece);
-      while (!compare(right(prevPiece), left(currentPiece))) {
-        currentPiece = rotate(currentPiece);
-      }
-      result.push(currentPiece);
+  const rotateRight = p => ({ ...p, edges: { top: left(p), right: top(p), bottom: right(p), left: bottom(p)}});
+  const rotateLeft = p => ({ ...p, edges: { top: right(p), right: bottom(p), bottom: left(p), left: top(p)}});
+  const rotateFull = p => ({ ...p, edges: { top: bottom(p), right: left(p),bottom: top(p), left: right(p)}});
+  const rotate = (piece, angle = 1) => {
+      if (angle === 1 || angle === -3) return rotateRight(piece);
+      if (angle === 2 || angle === -2) return rotateFull(piece);
+      if (angle === 3 || angle === -1) return rotateLeft(piece);
+      return piece;
     }
-    return result;
-  }
+  const rotateFit = (piece, leftPiece = null, topPiece = null) =>
+    [ rotate(piece,0), 
+      rotate(piece,1), 
+      rotate(piece,2), 
+      rotate(piece,3) 
+    ].find(el => compare(left(el), right(leftPiece)) && compare(top(el), bottom(topPiece)));
 
-  const init = piecesAll => {
-    piecesAll.forEach(piece => {
-      [ top(piece), right(piece), bottom(piece), left(piece) ].forEach(
-        edge => {
-          if (edge) {
-            if (edgeType(edge) === 'inside') mapInside.set(edgeId(edge), piece);
-            if (edgeType(edge) === 'outside') mapOutside.set(edgeId(edge), piece);
-          }
+  const initPuzzle = puzzle => {
+    const puzzleMap = new Map;
+    puzzle.forEach(piece => {
+      [ top(piece), right(piece), bottom(piece), left(piece) ].forEach(edge => {
+        if (edge) {
+          puzzleMap.set(JSON.stringify(suitableEdge(edge)), piece);
         }
-      )
-    })
-  }
+      })
+    });    
+    return puzzleMap;
+  }      
 
-  let startPiece = pieces[0];
-  init(pieces);
-  while (!compare(top(startPiece), null) || !compare(left(startPiece), null)) {
-    startPiece = rotate(startPiece);
+  const buildPuzzle = (puzzleMap, acc) => {    
+    if (acc.length === pieces.length ) {      
+      return acc
+    }
+    const row = Math.floor((acc.length) / PUZZLE_SIZE)
+    const col = acc.length % PUZZLE_SIZE
+    const topPiece = row ? acc[acc.length - PUZZLE_SIZE] : null
+    const leftPiece = col ? acc[acc.length - 1] : null
+    const topEdge = bottom(topPiece)
+    const leftEdge = right(leftPiece)   
+    const nextPiece = rotateFit(
+      topPiece ? puzzleMap.get(JSON.stringify(topEdge)) : puzzleMap.get(JSON.stringify(leftEdge)),
+      leftPiece,
+      topPiece)
+    return buildPuzzle(puzzleMap, [ ...acc, nextPiece ])
   }
-
-  return column(startPiece)
-    .reduce((acc, piece) => [ ...acc, ...row(piece) ], [])
-    .map(piece => piece.id);
+  
+  return buildPuzzle(initPuzzle(pieces), [ rotateFit(pieces[0]) ]).map(el => el.id)
 }
 
 // Не удаляйте эту строку
